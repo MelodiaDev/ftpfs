@@ -1,7 +1,7 @@
 obj-m := ftpfs.o
-ftpfs-objs := ftpfs.o
+ftpfs-objs := init.o
 
-CFLAGS_ftpfs.o = -DDEBUG
+CFLAGS_init.o = -DDEBUG
 
 KDIR ?= /lib/modules/`uname -r`/build
 
