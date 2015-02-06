@@ -29,6 +29,13 @@ static const struct super_operations ftp_fs_ops = {
     .show_options = generic_show_options,
 };
 
+static const struct address_space_operations ftp_fs_aops = {
+    .readpage = simple_readpage,
+    .write_begin = simple_write_begin,
+    .write_end = simple_write_end,
+    .set_page_dirty = __set_page_dirty_no_writeback,
+};
+
 static struct backing_dev_info ftp_fs_bdi = {
     .name = "ftpfs",
     .ra_pages = 0,
@@ -53,6 +60,37 @@ static const match_table_t tokens = {
     {Opt_mode, "mode=%o"},
     {Opt_err, NULL}
 };
+
+struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, umode_t mode, dev_t dev) {
+    struct inode* inode = new_inode(sb);
+    if (inode) {
+        inode->i_ino = get_next_ino();
+        inode_init_owner(inode, dir, mode);
+        inode->i_mapping->a_ops = &ftp_fs_aops;
+        inode->i_mapping->backing_dev_info = &ftp_fs_bdi;
+        mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
+        mapping_set_unevictable(inode->i_mapping);
+        inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+
+        switch (mode & S_IFMT) {
+            case S_IFREG:
+                inode->i_op = &ftp_fs_file_inode_operations;
+                inode->i_fop = &ftp_fs_file_operations;
+                break;
+            case S_IFDIR:
+                inode->i_op = &ftp_fs_dir_inode_operations;
+                inode->i_fop = &ftp_fs_dir_operations;
+                break;
+            case S_IFLINK:
+                inode->i_op = &page_symlink_inode_operations;
+                break;
+            default:
+                init_special_inode(inode, mode, dev);
+                break;
+        }
+    }
+    return inode;
+}
 
 static int ftp_fs_parse_options(char *data, struct ftp_fs_mount_opts *opts) {
     substring_t args[MAX_OPT_ARGS];
