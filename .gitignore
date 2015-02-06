@@ -5,3 +5,4 @@ Module.symvers
 *.ko
 *.mod.c
 .tmp_versions/
+log
