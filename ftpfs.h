@@ -15,6 +15,8 @@
 #include <linux/parser.h>
 #include <linux/magic.h>
 #include <linux/slab.h>
+#include <linux/compiler.h>
+#include <linux/types.h>
 #include <asm/uaccess.h>
 
 #define FTP_FS_DEFAULT_MODE 0755

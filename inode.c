@@ -3,6 +3,19 @@
 #include "super.h"
 #include "file.h"
 
+const struct inode_operations ftp_fs_dir_inode_operations = {
+    .create = ftp_fs_create,
+    .lookup = ftp_fs_lookup,
+    .mkdir = ftp_fs_mkdir,
+    .rmdir = ftp_fs_rmdir,
+};
+
+const struct inode_operations ftp_fs_file_inode_operations = {
+    .setattr = simple_setattr,
+    .getattr = simple_getattr,
+};
+
+
 struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, umode_t mode, dev_t dev) {
     struct inode* inode = new_inode(sb);
     if (inode) {
