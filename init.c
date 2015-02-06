@@ -79,7 +79,7 @@ struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, 
                 break;
             case S_IFDIR:
                 inode->i_op = &ftp_fs_dir_inode_operations;
-                inode->i_fop = &ftp_fs_dir_operations;
+                inode->i_fop = &simple_dir_operations;
                 break;
             case S_IFLINK:
                 inode->i_op = &page_symlink_inode_operations;
