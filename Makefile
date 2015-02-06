@@ -1,5 +1,5 @@
 obj-m := ftpfs.o
-ftpfs-objs := init.o
+ftpfs-objs := init.o inode.o super.o file.o
 
 CFLAGS_init.o = -DDEBUG
 

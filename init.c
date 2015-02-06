@@ -1,21 +1,7 @@
-#include <linux/module.h>
-#include <linux/fs.h>
-#include <linux/pagemap.h>
-#include <linux/highmem.h>
-#include <linux/time.h>
-#include <linux/init.h>
-#include <linux/string.h>
-#include <linux/backing-dev.h>
-#include <linux/ramfs.h>
-#include <linux/sched.h>
-#include <linux/parser.h>
-#include <linux/magic.h>
-#include <linux/slab.h>
-#include <asm/uaccess.h>
-
 #include "ftpfs.h"
 #include "super.h"
 #include "inode.h"
+#include "file.h"
 
 
 int __init ftpfs_init(void) {

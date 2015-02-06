@@ -1,10 +1,12 @@
+#include "ftpfs.h"
 #include "super.h"
+#include "inode.h"
 
-static struct ftp_fs_mount_opts {
+struct ftp_fs_mount_opts {
     umode_t mode;
 };
 
-static struct ftp_fs_info {
+struct ftp_fs_info {
     struct ftp_fs_mount_opts mount_opts;
 };
 
@@ -23,7 +25,7 @@ const struct super_operations ftp_fs_ops = {
     .show_options = generic_show_options,
 };
 
-static struct backing_dev_info ftp_fs_bdi = {
+struct backing_dev_info ftp_fs_bdi = {
     .name = "ftpfs",
     .ra_pages = 0,
     .capabilities = BDI_CAP_NO_ACCT_AND_WRITEBACK |

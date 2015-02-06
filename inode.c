@@ -1,4 +1,7 @@
+#include "ftpfs.h"
 #include "inode.h"
+#include "super.h"
+#include "file.h"
 
 struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, umode_t mode, dev_t dev) {
     struct inode* inode = new_inode(sb);
@@ -20,7 +23,7 @@ struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, 
                 inode->i_op = &ftp_fs_dir_inode_operations;
                 inode->i_fop = &simple_dir_operations;
                 break;
-            case S_IFLINK:
+            case S_IFLNK:
                 inode->i_op = &page_symlink_inode_operations;
                 break;
             default:
@@ -30,3 +33,4 @@ struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, 
     }
     return inode;
 }
+
