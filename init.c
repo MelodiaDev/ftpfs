@@ -11,8 +11,11 @@ int __init ftpfs_init(void) {
     if (test_and_set_bit(0, &once)) return 0; // avoiding race condition
     pr_debug("ftpfs module loaded\n");
     
+    /*
+     * bdi device
     if ((err = bdi_init(&ftp_fs_bdi)))
         return err;
+    */
 
     if ((err = register_filesystem(&ftp_fs_type)))
         bdi_destroy(&ftp_fs_bdi);

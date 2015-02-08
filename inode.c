@@ -21,10 +21,13 @@ struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, 
     if (inode) {
         inode->i_ino = get_next_ino();
         inode_init_owner(inode, dir, mode);
+        /*
+         * bdi device code
         inode->i_mapping->a_ops = &ftp_fs_aops;
         inode->i_mapping->backing_dev_info = &ftp_fs_bdi;
         mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
         mapping_set_unevictable(inode->i_mapping);
+        */
         inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 
         switch (mode & S_IFMT) {
