@@ -6,6 +6,7 @@
 
 struct ftp_conn_info {
 	struct socket *control_sock, *data_sock;
+	char *cmd;
 	unsigned long offset;
 	int used;
 };
