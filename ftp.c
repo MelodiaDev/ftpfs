@@ -2,6 +2,7 @@
 #include "sock.h"
 #include <linux/slab.h>
 #include <linux/ctype.h>
+#include <linux/time.h>
 
 int ftp_info_init(struct ftp_info **info, struct sockaddr_in addr, const char *user, const char *pass, int max_sock) {
 	*info = (struct ftp_info*)kmalloc(sizeof(struct ftp_info), GFP_KERNEL);
@@ -39,6 +40,13 @@ void ftp_info_destroy(struct ftp_info *info) {
 	kfree(info->pass);
 	kfree(info->conn_list);
 	kfree(info);
+}
+
+void ftp_file_info_destroy(unsigned long len, struct ftp_file_info *files) {
+	unsigned long i = 0;
+	for (; i < len; i++)
+		kfree(files[i].name);
+	kfree(files);
 }
 
 static int ftp_send(struct ftp_conn_info *conn, const char *cmd) {
@@ -199,8 +207,10 @@ static int ftp_request_conn(struct ftp_info *info, struct ftp_conn_info **conn) 
 	down(&info->mutex);
 	ftp_find_conn(info, &tmp_conn);
 	up(&info->mutex);
-	if (tmp_conn->control_sock == NULL && ftp_connect(info, tmp_conn) < 0)
+	if (tmp_conn->control_sock == NULL && ftp_connect(info, tmp_conn) < 0) {
+		up(&info->sem);
 		return -1;
+	}
 	*conn = tmp_conn;
 	return 0;
 }
@@ -208,7 +218,7 @@ static int ftp_request_conn(struct ftp_info *info, struct ftp_conn_info **conn) 
 static int ftp_request_conn_open_pasv(struct ftp_info *info, struct ftp_conn_info **conn, const char *cmd, const unsigned long offset) {
 	struct ftp_conn_info *tmp_conn;
 	int i;
-	char *tmp_cmd;
+	char *tmp_cmd, buf[256];
 	down(&info->sem);
 	down(&info->mutex);
 	for (i = 0; i < info->max_sock; i++)
@@ -225,6 +235,13 @@ static int ftp_request_conn_open_pasv(struct ftp_info *info, struct ftp_conn_inf
 		goto error0;
 	if (tmp_conn->data_sock == NULL && ftp_open_pasv(tmp_conn) < 0)
 		goto error1;
+	if (offset) {
+		sprintf(buf, "REST %ld", offset);
+		if (ftp_send(tmp_conn, buf) < 0 || ftp_recv(tmp_conn, NULL) != 350)
+			goto error2;
+	}
+	if (ftp_send(tmp_conn, cmd) < 0 || ftp_recv(tmp_conn, NULL) != 150)
+		goto error2;
 	tmp_cmd = (char*)kmalloc(strlen(cmd) + 1, GFP_KERNEL);
 	if (tmp_cmd == NULL)
 		goto error2;
@@ -238,6 +255,7 @@ error2:
 error1:
 	sock_release(tmp_conn->control_sock);
 error0:
+	up(&info->sem);
 	return -1;
 }
 
@@ -251,4 +269,170 @@ static void ftp_release_conn(struct ftp_info *info, struct ftp_conn_info *conn) 
 static void ftp_release_conn_destroy(struct ftp_info *info, struct ftp_conn_info *conn) {
 	ftp_destroy_conn(conn);
 	ftp_release_conn(info, conn);
+}
+
+int ftp_read_file(struct ftp_info *info, const char *file, unsigned long offset, char *buf, unsigned long len) {
+	struct ftp_conn_info *conn;
+	char *cmd = (char*)kmalloc(strlen(file) + 8, GFP_KERNEL);
+	int ret;
+	if (cmd == NULL)
+		return -1;
+	sprintf(cmd, "STOR ./%s", file);
+	if (ftp_request_conn_open_pasv(info, &conn, cmd, offset) < 0)
+		return -1;
+	ret = sock_send(conn->data_sock, buf, len);
+	if (ret < 0) {
+		ftp_release_conn_destroy(info, conn);
+		return -1;
+	}
+	conn->offset += ret;
+	ftp_release_conn(info, conn);
+	return ret;
+}
+
+int ftp_write_file(struct ftp_info *info, const char *file, unsigned long offset, char *buf, unsigned long len) {
+	struct ftp_conn_info *conn;
+	char *cmd = (char*)kmalloc(strlen(file) + 8, GFP_KERNEL);
+	int ret;
+	if (cmd == NULL)
+		return -1;
+	sprintf(cmd, "RETR ./%s", file);
+	if (ftp_request_conn_open_pasv(info, &conn, cmd, offset) < 0)
+		return -1;
+	ret = sock_recv(conn->data_sock, buf, len);
+	if (ret < 0) {
+		ftp_release_conn_destroy(info, conn);
+		return -1;
+	}
+	conn->offset += ret;
+	ftp_release_conn(info, conn);
+	return ret;
+}
+
+int ftp_read_dir(struct ftp_info *info, const char *path, unsigned long *len, struct ftp_file_info **files) {
+	static const char *months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+	struct ftp_conn_info *conn;
+	struct ftp_file_info *tmp_files;
+	int ret, i, current_year, year, month, day, hour, min;
+	unsigned long tmp_len, buf_len, tmp;
+	struct timeval time;
+	struct tm tm;
+	char *cmd = (char*)kmalloc(strlen(path) + 12, GFP_KERNEL), *line, *ptr, *next;
+	if (cmd == NULL)
+		return -1;
+	sprintf(cmd, "LIST -al ./%s", path);
+	if (ftp_request_conn_open_pasv(info, &conn, cmd, 0) < 0)
+		return -1;
+	do_gettimeofday(&time);
+	time_to_tm(time.tv_sec, 0, &tm);
+	current_year = tm.tm_year;
+
+	tmp_len = 0;
+	buf_len = 16;
+	tmp_files = (struct ftp_file_info*)kmalloc(16 * sizeof(struct ftp_file_info), GFP_KERNEL);
+	if (tmp_files == NULL)
+		goto error0;
+	while ((ret = sock_readline(conn->data_sock, &line)) > 0) {
+		if (tmp_len == buf_len) {
+			struct ftp_file_info *tmp_files2 = (struct ftp_file_info*)kmalloc(2 * buf_len * sizeof(struct ftp_file_info), GFP_KERNEL);
+			if (tmp_files2 == NULL)
+				goto error1;
+			memcpy(tmp_files2, tmp_files, buf_len * sizeof(struct ftp_file_info));
+			kfree(tmp_files);
+			tmp_files = tmp_files2;
+		}
+
+		ptr = line;
+		for (i = 0; i < 8; i++) {
+			for (; *ptr != 0 && *ptr == ' '; ptr++);
+			if (*ptr == 0)
+				goto error2;
+			next = ptr;
+			for (; *next != 0 && *next != ' '; next++);
+			*next = 0;
+			switch (i) {
+				case 0:
+					if (next - ptr != 10)
+						goto error2;
+					if (ptr[0] == 'd') tmp_files[tmp_len].mode |= S_IFDIR;
+					else if (ptr[0] == 'l') tmp_files[tmp_len].mode |= S_IFLNK;
+					else tmp_files[tmp_len].mode |= S_IFREG;
+					if (ptr[1] == 'r') tmp_files[tmp_len].mode |= S_IRUSR;
+					if (ptr[2] == 'w') tmp_files[tmp_len].mode |= S_IWUSR;
+					if (ptr[3] == 'x') tmp_files[tmp_len].mode |= S_IXUSR;
+					if (ptr[4] == 'r') tmp_files[tmp_len].mode |= S_IRGRP;
+					if (ptr[5] == 'w') tmp_files[tmp_len].mode |= S_IWGRP;
+					if (ptr[6] == 'x') tmp_files[tmp_len].mode |= S_IXGRP;
+					if (ptr[7] == 'r') tmp_files[tmp_len].mode |= S_IROTH;
+					if (ptr[8] == 'w') tmp_files[tmp_len].mode |= S_IWOTH;
+					if (ptr[9] == 'x') tmp_files[tmp_len].mode |= S_IXOTH;
+					break;
+				case 1:
+					if (sscanf(ptr, "%lu", &tmp) < 1)
+						goto error2;
+					tmp_files[tmp_len].nlink = tmp;
+					break;
+				case 2: case 3:
+					break;
+				case 4:
+					if (sscanf(ptr, "%lu", &tmp) < 1)
+						goto error2;
+					tmp_files[tmp_len].size = tmp;
+					break;
+				case 5:
+					if (next - ptr != 3)
+						goto error2;
+					month = 0;
+					for (; month < 12; month++)
+						if (strcmp(months[month], ptr) == 0)
+							break;
+					if (month == 12)
+						goto error2;
+					month++;
+					break;
+				case 6:
+					if (sscanf(ptr, "%d", &day) < 1)
+						goto error2;
+					break;
+				case 7:
+					if (sscanf(ptr, "%d:%d", &hour, &min) == 2)
+						year = current_year;
+					else if (sscanf(ptr, "%d", &year) == 1)
+						hour = min = 0;
+					else
+						goto error2;
+					tmp_files[tmp_len].mtime = mktime(year, month, day, hour, min, 0);
+					break;
+			}
+			*next = ' ';
+			ptr = next;
+		}
+
+		//TODO: link
+		for (; *ptr != 0 && *ptr == ' '; ptr++);
+		if (*ptr == 0)
+			goto error2;
+		tmp_files[tmp_len].name = kmalloc(strlen(ptr) + 1, GFP_KERNEL);
+		if (tmp_files[tmp_len].name == NULL)
+			goto error2;
+		strcpy(tmp_files[tmp_len].name, ptr);
+		tmp_len++;
+		kfree(line);
+	}
+	if (ret < 0)
+		goto error1;
+	sock_release(conn->data_sock);
+	conn->data_sock = NULL;
+	kfree(conn->cmd);
+	ftp_release_conn(info, conn);
+	*files = tmp_files;
+	*len = tmp_len;
+	return ret;
+error2:
+	kfree(line);
+error1:
+	ftp_file_info_destroy(tmp_len, tmp_files);
+error0:
+	ftp_release_conn_destroy(info, conn);
+	return -1;
 }

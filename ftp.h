@@ -19,7 +19,19 @@ struct ftp_info {
 	struct ftp_conn_info *conn_list;
 };
 
+struct ftp_file_info {
+	char *name;
+	umode_t mode;
+	nlink_t nlink;
+	off_t size;
+	time_t mtime;
+};
+
 int ftp_info_init(struct ftp_info **info, struct sockaddr_in addr, const char *user, const char *pass, int max_sock);
 void ftp_info_destroy(struct ftp_info *info);
+void ftp_file_info_destroy(unsigned long len, struct ftp_file_info *files);
+int ftp_read_file(struct ftp_info *info, const char *file, unsigned long offset, char *buf, unsigned long len);
+int ftp_write_file(struct ftp_info *info, const char *file, unsigned long offset, char *buf, unsigned long len);
+int ftp_read_dir(struct ftp_info *info, const char *path, unsigned long *len, struct ftp_file_info **files);
 
 #endif
