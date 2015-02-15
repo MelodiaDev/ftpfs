@@ -25,14 +25,6 @@ const struct super_operations ftp_fs_ops = {
     .show_options = generic_show_options,
 };
 
-struct backing_dev_info ftp_fs_bdi = {
-    .name = "ftpfs",
-    .ra_pages = 0,
-    .capabilities = BDI_CAP_NO_ACCT_AND_WRITEBACK |
-                    BDI_CAP_MAP_DIRECT | BDI_CAP_MAP_COPY |
-                    BDI_CAP_READ_MAP | BDI_CAP_WRITE_MAP | BDI_CAP_EXEC_MAP,
-};
-
 static int ftp_fs_parse_options(char *data, struct ftp_fs_mount_opts *opts) {
     substring_t args[MAX_OPT_ARGS];
     int option;
@@ -62,6 +54,7 @@ int ftp_fs_fill_super(struct super_block *sb, void *data, int silent) {
     struct inode* inode;
     int err;
 
+    pr_debug("begin ftp_fs_fill_super\n");
     save_mount_options(sb, data);
 
     fsi = kzalloc(sizeof(struct ftp_fs_info), GFP_KERNEL);
@@ -78,6 +71,7 @@ int ftp_fs_fill_super(struct super_block *sb, void *data, int silent) {
     sb->s_op = &ftp_fs_ops;
     sb->s_time_gran = 1;
 
+    pr_debug("try to fetch a inode to store super block\n");
     inode = ftp_fs_get_inode(sb, NULL, S_IFDIR | fsi->mount_opts.mode, 0);
     sb->s_root = d_make_root(inode);
     if (!sb->s_root) return -ENOMEM;

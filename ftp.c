@@ -290,7 +290,7 @@ int ftp_read_file(struct ftp_info *info, const char *file, unsigned long offset,
 	return ret;
 }
 
-int ftp_write_file(struct ftp_info *info, const char *file, unsigned long offset, char *buf, unsigned long len) {
+int ftp_write_file(struct ftp_info *info, const char *file, unsigned long offset, const char *buf, unsigned long len) {
 	struct ftp_conn_info *conn;
 	char *cmd = (char*)kmalloc(strlen(file) + 8, GFP_KERNEL);
 	int ret;
