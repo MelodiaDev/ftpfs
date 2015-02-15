@@ -22,4 +22,14 @@
 #define FTP_FS_DEFAULT_MODE 0755
 #define FTP_FS_MAGIC 0x19950522
 
+#define MAX_PATH_LEN (50 * sizeof (char))
+#define MAX_CONTENT_SIZE 52428800
+
+const char* FTP_IP = "192.168.1.1";
+const char* FTP_USERNAME = "vani";
+const char* FTP_PASSWORD = "123456";
+
+const int MAX_SOCK = 5;
+unsigned int FTP_PORT = 20;
+
 #endif

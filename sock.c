@@ -1,4 +1,5 @@
 #include <asm/uaccess.h>
+#include <arpa/inet.h>
 #include <linux/net.h>
 #include <linux/slab.h>
 
@@ -69,4 +70,14 @@ int sock_readline(struct socket *sock, char **buf) {
 			size *= 2;
 		}
 	}
+}
+
+struct sockaddr_in* cons_addr(const char* ip) {
+    struct sockaddr_in *addr = kmalloc(sizeof(struct sockaddr_in), GFP_KERNEL);
+    if (addr) {
+        addr->sin_family = AF_INET;
+        addr->sin_port = htons(FTP_PORT);
+        inet_aton(ip, &addr->sin_addr.s_addr);
+    }
+    return addr;
 }
