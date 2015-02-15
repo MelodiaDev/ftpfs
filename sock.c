@@ -53,7 +53,7 @@ int sock_readline(struct socket *sock, char **buf) {
 		ret = sock_recv(sock, *buf + read, 1);
 		if (ret <= 0) {
 			kfree(*buf);
-			return -1;
+			return ret < 0 ? -1 : 0;
 		}
 		read++;
 		if (*buf[read - 1] == '\n') {
