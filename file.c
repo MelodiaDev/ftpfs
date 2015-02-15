@@ -12,11 +12,13 @@ ssize_t ftp_fs_read(struct file* f, char __user *buf, size_t count, loff_t *offs
     ssize_t content_size = -1;
     struct dentry *dentry = f->f_dentry;
 
+    pr_debug("begin to read\n");
     char *path_buf = (char*) kmalloc(MAX_PATH_LEN, GFP_KERNEL);
     if (path_buf == NULL)
         goto error0;
     char *full_path = dentry_path_raw(dentry, path_buf, MAX_PATH_LEN);
 
+    pr_debug("file name is: %s\n", full_path);
     struct sockaddr_in *addr = cons_addr(FTP_IP);
     if (addr == NULL)
         goto error1;
@@ -27,6 +29,7 @@ ssize_t ftp_fs_read(struct file* f, char __user *buf, size_t count, loff_t *offs
 
     content_size = ftp_read_file(ftp_info, full_path, *offset, buf, count);
 
+    pr_debug("recieved content size: %lu\n", content_size);
     if (content_size != -1) *offset += content_size;
 
     ftp_info_destroy(ftp_info);
@@ -42,11 +45,13 @@ ssize_t ftp_fs_write(struct file* f, const char __user *buf, size_t count, loff_
     ssize_t content_size = -1;
     struct dentry *dentry = f->f_dentry;
 
+    pr_debug("begin to read\n");
     char *path_buf = (char*) kmalloc(MAX_PATH_LEN, GFP_KERNEL);
     if (path_buf == NULL)
         goto error0;
     char *full_path = dentry_path_raw(dentry, path_buf, MAX_PATH_LEN);
 
+    pr_debug("file name is: %s\n", full_path);
     struct sockaddr_in *addr = cons_addr(FTP_IP);
     if (addr == NULL)
         goto error1;
@@ -57,6 +62,7 @@ ssize_t ftp_fs_write(struct file* f, const char __user *buf, size_t count, loff_
 
     content_size = ftp_write_file(ftp_info, full_path, *offset, buf, count);
 
+    pr_debug("recieved content size: %lu\n", content_size);
     if (content_size != -1) *offset += content_size;
 
     ftp_info_destroy(ftp_info);
