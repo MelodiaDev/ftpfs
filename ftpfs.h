@@ -25,11 +25,11 @@
 #define MAX_PATH_LEN (50 * sizeof (char))
 #define MAX_CONTENT_SIZE 52428800
 
-#define FTP_IP "192.168.1.1"
-#define FTP_USERNAME "vani"
-#define FTP_PASSWORD "123456"
+#define FTP_IP "104.236.22.129"
+#define FTP_USERNAME "ftpusr"
+#define FTP_PASSWORD "ftpfsdev"
 
 #define MAX_SOCK 5
-#define FTP_PORT 20u
+#define FTP_PORT 21u
 
 #endif
