@@ -82,15 +82,17 @@ int ftp_fs_iterate(struct file* f, struct dir_context* ctx) {
     struct dentry *dentry = f->f_dentry;
 
     if (ctx->pos == 0) {
-        pr_debug("dir_emit \".\" with i_node number %d\n", dentry->d_inode->i_ino);
-        if (dir_emit(ctx, ".", 1, ctx->pos, dentry->d_inode->i_ino, DT_DIR) != 0) {
+        pr_debug("dir_emit \".\" with i_node number %lu\n", dentry->d_inode->i_ino);
+        if (dir_emit(ctx, ".", 1, dentry->d_inode->i_ino, DT_DIR) != 0) {
+            pr_debug("dir_emit failed\n");
             goto error0;
         }
         ctx->pos = 1;
     }
     if (ctx->pos == 1) {
-        pr_debug("dir_emit \"..\" with i_node number %d\n", parent_ino(dentry));
-        if (dir_emit(ctx, "..", 2, ctx->pos, parent_ino(dentry), DT_DIR) != 0) {
+        pr_debug("dir_emit \"..\" with i_node number %lu\n", parent_ino(dentry));
+        if (dir_emit(ctx, "..", 2, parent_ino(dentry), DT_DIR) != 0) {
+            pr_debug("dir_emit failed\n");
             goto error0;
         }
         ctx->pos = 2;
@@ -113,17 +115,21 @@ int ftp_fs_iterate(struct file* f, struct dir_context* ctx) {
 
     unsigned long file_num;
     struct ftp_file_info *files;
-    if ((result = ftp_read_dir(ftp_info, full_path, file_num, &files)) == 0) {
+    if ((result = ftp_read_dir(ftp_info, full_path, &file_num, &files)) == 0) {
         int i;
         for (i = 0; i < file_num; i++) {
             /* TODO, a fake inode number */
-            pr_debug("dir_emt \"%s\" with i_node number %d\n", files[i].name, 0);
-            dir_emit(ctx, files[i].name, strlen(files[i].name), ctx->pos, 0, (files[i].mode >> 12) & 25);
+            pr_debug("dir_emt \"%s\" with i_node number %lu\n", files[i].name, 0lu);
+            if (dir_emit(ctx, files[i].name, strlen(files[i].name), 0, (files[i].mode >> 12) & 25) != 0) {
+                pr_debug("dir_emit failed\n");
+                goto error3;
+            }
             ctx->pos++;
         }
         ftp_file_info_destroy(file_num, files);
     }
 
+error3:
     ftp_info_destroy(ftp_info);
 error2:
     kfree(addr);
