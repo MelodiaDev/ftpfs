@@ -78,14 +78,17 @@ int sock_readline(struct socket *sock, char **buf) {
 static unsigned short _htons(unsigned short port) {
     unsigned short s0 = port & (unsigned short)0x00ff;
     unsigned short s1 = port & (unsigned short)0xff00; 
+    pr_debug("got the port %lu\n", (s0 << 8) + s1);
     return (s0 << 8) + s1;
 }
 
 static void _inet_aton(const char* ip, unsigned int *res) {
     unsigned int s[4];
     int i;
-    sscanf(ip, "%u,%u,%u,%u", s, s + 1, s + 2, s + 3);
+    sscanf(ip, "%lu.%lu.%lu.%lu", s, s + 1, s + 2, s + 3);
     for (i = 0; i < 4; i++) *res |= s[i] << (8 * i);
+    pr_debug("%lu.%lu.%lu.%lu\n", s[0], s[1], s[2], s[3]);
+    pr_debug("got the ip %lu\n", *res);
 }
 
 struct sockaddr_in* cons_addr(const char* ip) {

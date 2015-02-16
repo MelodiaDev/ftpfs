@@ -8,6 +8,10 @@
 const struct file_operations ftp_fs_file_operations = {
     .read = ftp_fs_read,
     .write = ftp_fs_write,
+};
+
+const struct file_operations ftp_fs_dir_operations = {
+    .open = dcache_dir_open,
     .iterate = ftp_fs_iterate,
 };
 
@@ -30,6 +34,7 @@ ssize_t ftp_fs_read(struct file* f, char __user *buf, size_t count, loff_t *offs
         goto error2;
     }
 
+    pr_debug("try to connect ftp server\n");
     content_size = ftp_read_file(ftp_info, full_path, *offset, buf, count);
 
     pr_debug("recieved content size: %lu\n", content_size);
@@ -63,6 +68,7 @@ ssize_t ftp_fs_write(struct file* f, const char __user *buf, size_t count, loff_
         goto error2;
     }
 
+    pr_debug("try to connect ftp server\n");
     content_size = ftp_write_file(ftp_info, full_path, *offset, buf, count);
 
     pr_debug("recieved content size: %lu\n", content_size);
@@ -78,27 +84,15 @@ error0:
 }
 
 int ftp_fs_iterate(struct file* f, struct dir_context* ctx) {
+    pr_debug("begin to iterate\n");
+    if (!dir_emit_dots(f, ctx)) {
+        pr_debug("emit dot failed\n");
+        return 0;
+    }
+
     int result = -1;
     struct dentry *dentry = f->f_dentry;
 
-    if (ctx->pos == 0) {
-        pr_debug("dir_emit \".\" with i_node number %lu\n", dentry->d_inode->i_ino);
-        if (dir_emit(ctx, ".", 1, dentry->d_inode->i_ino, DT_DIR) != 0) {
-            pr_debug("dir_emit failed\n");
-            goto error0;
-        }
-        ctx->pos = 1;
-    }
-    if (ctx->pos == 1) {
-        pr_debug("dir_emit \"..\" with i_node number %lu\n", parent_ino(dentry));
-        if (dir_emit(ctx, "..", 2, parent_ino(dentry), DT_DIR) != 0) {
-            pr_debug("dir_emit failed\n");
-            goto error0;
-        }
-        ctx->pos = 2;
-    }
-
-    pr_debug("begin to write\n");
     char *path_buf = (char*) kmalloc(MAX_PATH_LEN, GFP_KERNEL);
     if (path_buf == NULL)
         goto error0;
@@ -115,7 +109,9 @@ int ftp_fs_iterate(struct file* f, struct dir_context* ctx) {
 
     unsigned long file_num;
     struct ftp_file_info *files;
+    pr_debug("try to connect ftp server\n");
     if ((result = ftp_read_dir(ftp_info, full_path, &file_num, &files)) == 0) {
+        pr_debug("got %lu files under the dir\n", file_num);
         int i;
         for (i = 0; i < file_num; i++) {
             /* TODO, a fake inode number */
@@ -138,3 +134,4 @@ error1:
 error0:
     return result;
 }
+

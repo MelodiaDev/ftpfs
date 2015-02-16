@@ -8,6 +8,10 @@ const struct inode_operations ftp_fs_file_inode_operations = {
     .getattr = simple_getattr,
 };
 
+const struct inode_operations ftp_fs_dir_inode_operations = {
+    .create = ftp_fs_create,
+    .lookup = simple_lookup,
+};
 
 struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, umode_t mode, dev_t dev) {
     struct inode* inode = new_inode(sb);
@@ -18,18 +22,26 @@ struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, 
 
         switch (mode & S_IFMT) {
             case S_IFREG:
+                pr_debug("got a regular inode\n");
                 inode->i_op = &ftp_fs_file_inode_operations;
                 inode->i_fop = &ftp_fs_file_operations;
                 break;
             case S_IFDIR:
-                inode->i_op = &ftp_fs_file_inode_operations;
-                inode->i_fop = &ftp_fs_file_operations;
+                pr_debug("got a dir inode\n");
+                inode->i_op = &ftp_fs_dir_inode_operations;
+                inode->i_fop = &ftp_fs_dir_operations;
                 break;
             default:
+                pr_debug("got a special inode\n");
                 init_special_inode(inode, mode, dev);
                 break;
         }
     }
     return inode;
+}
+
+int ftp_fs_create(struct inode* dir, struct dentry *dentry, umode_t mode, bool excl) {
+    // TODO
+    return 0;
 }
 
