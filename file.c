@@ -1,7 +1,6 @@
 #include "ftpfs.h"
 #include "file.h"
 #include "ftp.h"
-#include "sock.h"
 #include "inode.h"
 
 #include <linux/ctype.h>
@@ -20,12 +19,6 @@ const struct file_operations ftp_fs_dir_operations = {
     .iterate = ftp_fs_iterate,
 };
 
-const struct dentry_operations simple_dentry_operations = {
-	.d_delete = always_delete_dentry,
-};
-
-int always_delete_dentry(const struct dentry *dentry) { return 1; }
-
 ssize_t ftp_fs_read(struct file* f, char __user *buf, size_t count, loff_t *offset) {
     ssize_t content_size = -1;
     struct dentry *dentry = f->f_dentry;
@@ -37,24 +30,12 @@ ssize_t ftp_fs_read(struct file* f, char __user *buf, size_t count, loff_t *offs
     char *full_path = dentry_path_raw(dentry, path_buf, MAX_PATH_LEN);
 
     pr_debug("file name is: %s\n", full_path);
-    struct sockaddr_in *addr = cons_addr(FTP_IP);
-    if (addr == NULL)
-        goto error1;
-    struct ftp_info *ftp_info;
-    if (ftp_info_init(&ftp_info, *addr, FTP_USERNAME, FTP_PASSWORD, MAX_SOCK) == -1) {
-        goto error2;
-    }
-
     pr_debug("try to connect ftp server\n");
-    content_size = ftp_read_file(ftp_info, full_path, *offset, buf, count);
+    content_size = ftp_read_file((struct ftp_info*) f->f_inode->i_sb->s_fs_info, full_path, *offset, buf, count);
 
     pr_debug("recieved content size: %lu\n", content_size);
     if (content_size != -1) *offset += content_size;
 
-    ftp_info_destroy(ftp_info);
-error2:
-    kfree(addr);
-error1:
     kfree(path_buf);
 error0:
     return content_size;
@@ -71,24 +52,12 @@ ssize_t ftp_fs_write(struct file* f, const char __user *buf, size_t count, loff_
     char *full_path = dentry_path_raw(dentry, path_buf, MAX_PATH_LEN);
 
     pr_debug("file name is: %s\n", full_path);
-    struct sockaddr_in *addr = cons_addr(FTP_IP);
-    if (addr == NULL)
-        goto error1;
-    struct ftp_info *ftp_info;
-    if (ftp_info_init(&ftp_info, *addr, FTP_USERNAME, FTP_PASSWORD, MAX_SOCK) == -1) {
-        goto error2;
-    }
-
     pr_debug("try to connect ftp server\n");
-    content_size = ftp_write_file(ftp_info, full_path, *offset, buf, count);
+    content_size = ftp_write_file((struct ftp_info*) f->f_inode->i_sb->s_fs_info, full_path, *offset, buf, count);
 
     pr_debug("recieved content size: %lu\n", content_size);
     if (content_size != -1) *offset += content_size;
 
-    ftp_info_destroy(ftp_info);
-error2:
-    kfree(addr);
-error1:
     kfree(path_buf);
 error0:
     return content_size;
@@ -123,18 +92,11 @@ int ftp_fs_iterate(struct file* f, struct dir_context* ctx) {
     char *full_path = dentry_path_raw(dentry, path_buf, MAX_PATH_LEN);
 
     pr_debug("file name is: %s\n", full_path);
-    struct sockaddr_in *addr = cons_addr(FTP_IP);
-    if (addr == NULL)
-        goto error1;
-    struct ftp_info *ftp_info;
-    if (ftp_info_init(&ftp_info, *addr, FTP_USERNAME, FTP_PASSWORD, MAX_SOCK) == -1) {
-        goto error2;
-    }
 
     unsigned long file_num;
     struct ftp_file_info *files;
     pr_debug("try to connect ftp server\n");
-    if ((result = ftp_read_dir(ftp_info, full_path, &file_num, &files)) == 0) {
+    if ((result = ftp_read_dir((struct ftp_info*) f->f_inode->i_sb->s_fs_info, full_path, &file_num, &files)) == 0) {
         pr_debug("got %lu files under the dir\n", file_num);
 
 		struct fake_dentry_list *fake_dentry_head = NULL, *fake_dentry_last = NULL;
@@ -208,11 +170,6 @@ out:
         ftp_file_info_destroy(file_num, files);
     }
 
-error3:
-    ftp_info_destroy(ftp_info);
-error2:
-    kfree(addr);
-error1:
     kfree(path_buf);
 error0:
 	pr_debug("iterate result is %d\n", result);
