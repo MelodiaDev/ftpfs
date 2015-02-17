@@ -12,6 +12,8 @@ const struct inode_operations ftp_fs_dir_inode_operations = {
     .create = ftp_fs_create,
     .lookup = simple_lookup,
 	.mknod = ftp_fs_mknod,
+	.link = simple_link,
+	.unlink = simple_unlink,
 };
 
 struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, umode_t mode, dev_t dev) {
@@ -30,7 +32,7 @@ struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, 
             case S_IFDIR:
                 pr_debug("got a dir inode\n");
                 inode->i_op = &ftp_fs_dir_inode_operations;
-                inode->i_fop = &simple_dir_operations;
+                inode->i_fop = &ftp_fs_dir_operations;
                 break;
             default:
                 pr_debug("got a special inode\n");

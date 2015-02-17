@@ -2,8 +2,10 @@
 #include "file.h"
 #include "ftp.h"
 #include "sock.h"
+#include "inode.h"
 
 #include <linux/ctype.h>
+#include <linux/fs.h>
 
 const struct file_operations ftp_fs_file_operations = {
     .read = ftp_fs_read,
@@ -83,6 +85,19 @@ error0:
     return content_size;
 }
 
+struct fake_dentry_list {
+	struct dentry* dentry;
+	struct fake_dentry_list* next;
+};
+
+inline unsigned char _dt_type(struct inode* inode) {
+    return (inode->i_mode >> 12) & 15;
+}
+
+inline int simple_positive(struct dentry *dentry) {
+    return dentry->d_inode && !d_unhashed(dentry);
+}
+
 int ftp_fs_iterate(struct file* f, struct dir_context* ctx) {
     pr_debug("begin to iterate\n");
     if (!dir_emit_dots(f, ctx)) {
@@ -112,16 +127,62 @@ int ftp_fs_iterate(struct file* f, struct dir_context* ctx) {
     pr_debug("try to connect ftp server\n");
     if ((result = ftp_read_dir(ftp_info, full_path, &file_num, &files)) == 0) {
         pr_debug("got %lu files under the dir\n", file_num);
+
+		struct fake_dentry_list *fake_dentry_head = NULL, *fake_dentry_last = NULL;
+		/* allocate fake inodes */
         int i;
-        for (i = 0; i < file_num; i++) {
-            /* TODO, a fake inode number */
-            pr_debug("dir_emt \"%s\" with i_node number %lu\n", files[i].name, 0lu);
-            if (dir_emit(ctx, files[i].name, strlen(files[i].name), 0, (files[i].mode >> 12) & 25) != 0) {
-                pr_debug("dir_emit failed\n");
-                goto error3;
-            }
-            ctx->pos++;
-        }
+		for (i = 2 /* omit the . and .. */ ; i < file_num; i++) {
+			pr_debug("the fake dentry name is %s\n", files[i].name);
+
+			struct dentry *fake_dentry = d_alloc_name(dentry, files[i].name);
+			d_add(fake_dentry, NULL);
+			if (fake_dentry == NULL) {
+				pr_debug("can not allocate a fake dentry for ls\n");
+				result = -1;
+				goto out;
+			}
+
+			if (ftp_fs_mknod(dentry->d_inode, fake_dentry, files[i].mode, 0) != 0) {
+				pr_debug("can not allocate a inode for fake dentry\n");
+				result = -1;
+				goto out;
+			}
+
+			/* fill the information to inode (missing time format converting) */
+			/* fake_dentry->d_inode->i_mtime = files[i].mtime; */
+			fake_dentry->d_inode->i_size = files[i].size;
+
+			/* update the list */
+			struct fake_dentry_list* tmp = (struct fake_dentry_list*) kmalloc(sizeof(struct fake_dentry_list), GFP_KERNEL);
+			if (tmp == NULL) {
+				pr_debug("allocate fake_dentry_list node failed\n");
+				result = -1;
+				goto out;
+			}
+			tmp->next = NULL;
+			tmp->dentry = fake_dentry;
+			if (fake_dentry_last == NULL) {
+				fake_dentry_last = fake_dentry_head = tmp;
+			} else {
+				fake_dentry_last->next = tmp;
+				fake_dentry_last = tmp;
+			}
+		}
+
+		dcache_readdir(f, ctx);
+out:
+		/* free the fake dentry */
+		pr_debug("fake dentry lists: \n");
+		struct fake_dentry_list *ptr;
+		for (ptr = fake_dentry_head; ptr;) {
+			pr_debug("    %s\n", ptr->dentry->d_name.name);
+			drop_nlink(ptr->dentry->d_inode);
+			dput(ptr->dentry);
+			struct fake_dentry_list *next = ptr->next;
+			kfree(ptr);
+			ptr = next;
+		}
+
         ftp_file_info_destroy(file_num, files);
     }
 
@@ -132,6 +193,6 @@ error2:
 error1:
     kfree(path_buf);
 error0:
+	pr_debug("iterate result is %d\n", result);
     return result;
 }
-

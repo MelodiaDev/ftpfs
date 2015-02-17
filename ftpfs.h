@@ -25,6 +25,8 @@
 #define MAX_PATH_LEN (50 * sizeof (char))
 #define MAX_CONTENT_SIZE 52428800
 
+#define DEFAULT_MODE 0755
+
 #define FTP_IP "104.236.22.129"
 #define FTP_USERNAME "ftpusr"
 #define FTP_PASSWORD "ftpfsdev"
