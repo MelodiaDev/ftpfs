@@ -143,24 +143,30 @@ static int ftp_conn_connect(struct ftp_info *info, struct ftp_conn_info *conn) {
 		bufsize = tmp;
 	if (sock_create(AF_INET, SOCK_STREAM, 0, &conn->control_sock) < 0)
 		goto error0;
+	pr_debug("sock created, connecting to %u,%d", info->addr.sin_addr.s_addr, info->addr.sin_port);
 	if (conn->control_sock->ops->connect(conn->control_sock, (struct sockaddr*)&info->addr, sizeof(struct sockaddr_in), 0) < 0)
 		goto error1;
+	pr_debug("connected to server\n");
 	if (ftp_conn_recv(conn, NULL) != 220)
 		goto error1;
+	pr_debug("received initial response\n");
 	buf = (char*)kmalloc(bufsize, GFP_KERNEL);
 	if (buf == NULL)
 		goto error1;
 	sprintf(buf, "USER %s", info->user);
 	if (ftp_conn_send(conn, buf) < 0 || ((ret = ftp_conn_recv(conn, NULL)) != 230 && ret != 331))
 		goto error2;
+	pr_debug("user ok\n");
 	if (ret == 331) {
 		sprintf(buf, "PASS %s", info->pass);
 		if (ftp_conn_send(conn, buf) < 0 || ftp_conn_recv(conn, NULL) != 230)
 			goto error2;
 	}
+	pr_debug("password ok\n");
 	kfree(buf);
 	if (ftp_conn_send(conn, "TYPE I") < 0 || ftp_conn_recv(conn, NULL) != 200)
 		goto error1;
+	pr_debug("TYPE I ok, connection opened\n");
 	return 0;
 
 error2:
@@ -182,6 +188,7 @@ static int ftp_conn_open_pasv(struct ftp_conn_info *conn) {
 			kfree(resp);
 		goto error0;
 	}
+	pr_debug("pasv ok\n");
 	ptr = resp + 4;
 	for (; *ptr != 0 && (*ptr < '0' || *ptr > '9'); ptr++);
 	if (*ptr == 0 || sscanf(ptr, "%d,%d,%d,%d,%d,%d", &seg[0], &seg[1], &seg[2], &seg[3], &seg[4], &seg[5]) < 6) {
@@ -189,16 +196,19 @@ static int ftp_conn_open_pasv(struct ftp_conn_info *conn) {
 		goto error0;
 	}
 	kfree(resp);
+	data_addr.sin_family = AF_INET;
 	for (i = 0; i < 6; i++)
 		if (seg[i] < 0 || seg[i] >= 256)
 			goto error0;
 	for (i = 0; i < 4; i++)
 		((unsigned char*)&data_addr.sin_addr)[i] = seg[i];
+	pr_debug("got pasv port no: %d\n", (seg[4] << 8) + seg[5]);
 	data_addr.sin_port = htons((seg[4] << 8) + seg[5]);
 	if (sock_create(AF_INET, SOCK_STREAM, 0, &conn->data_sock) < 0)
 		goto error0;
 	if (conn->data_sock->ops->connect(conn->data_sock, (struct sockaddr*)&data_addr, sizeof(struct sockaddr_in), 0) < 0)
 		goto error1;
+	pr_debug("connected to pasv port, pasv succeeded");
 	return 0;
 
 error1:

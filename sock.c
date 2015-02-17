@@ -85,10 +85,10 @@ static unsigned short _htons(unsigned short port) {
 static void _inet_aton(const char* ip, unsigned int *res) {
     unsigned int s[4];
     int i;
-    sscanf(ip, "%lu.%lu.%lu.%lu", s, s + 1, s + 2, s + 3);
+    sscanf(ip, "%u.%u.%u.%u", s, s + 1, s + 2, s + 3);
 	*res = 0;
     for (i = 0; i < 4; i++) *res |= s[i] << (8 * i);
-    pr_debug("%lu.%lu.%lu.%lu\n", s[0], s[1], s[2], s[3]);
+    pr_debug("%u.%u.%u.%u\n", s[0], s[1], s[2], s[3]);
     pr_debug("got the ip %lu\n", *res);
 }
 
