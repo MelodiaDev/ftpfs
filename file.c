@@ -143,7 +143,19 @@ int ftp_fs_iterate(struct file* f, struct dir_context* ctx) {
 		for (i = 2 /* omit the . and .. */ ; i < file_num; i++) {
 			pr_debug("the fake dentry name is %s\n", files[i].name);
 
-			struct dentry *fake_dentry = d_alloc_name(dentry, files[i].name);
+			struct dentry *fake_dentry;
+			struct qstr q;
+			q.name = files[i].name;
+			q.len = strlen(files[i].name);
+			q.hash = full_name_hash(q.name, q.len);
+			
+			if ((fake_dentry = d_lookup(dentry, &q)) != NULL) {
+				dput(fake_dentry);
+				continue;
+			}
+			
+			fake_dentry= d_alloc_name(dentry, files[i].name);
+
 			d_set_d_op(dentry, &simple_dentry_operations);
 			d_add(fake_dentry, NULL);
 
