@@ -10,4 +10,5 @@ int ftp_fs_create(struct inode* inode, struct dentry* dentry, umode_t mode, bool
 int ftp_fs_mkdir(struct inode* inode, struct dentry* dentry, umode_t mode);
 int ftp_fs_rmdir(struct inode* inode, struct dentry* dentry);
 
+int ftp_fs_mknod(struct inode* dir, struct dentry* dentry, umode_t mode, dev_t dev);
 #endif
