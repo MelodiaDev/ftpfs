@@ -6,6 +6,7 @@
 
 #include <linux/ctype.h>
 #include <linux/fs.h>
+#include <linux/dcache.h>
 
 const struct file_operations ftp_fs_file_operations = {
     .read = ftp_fs_read,
@@ -13,9 +14,17 @@ const struct file_operations ftp_fs_file_operations = {
 };
 
 const struct file_operations ftp_fs_dir_operations = {
-    .open = dcache_dir_open,
+    .open = ftp_fs_dir_open,
+	.release = dcache_dir_close,
+	.read = generic_read_dir,
     .iterate = ftp_fs_iterate,
 };
+
+const struct dentry_operations simple_dentry_operations = {
+	.d_delete = always_delete_dentry,
+};
+
+int always_delete_dentry(const struct dentry *dentry) { return 1; }
 
 ssize_t ftp_fs_read(struct file* f, char __user *buf, size_t count, loff_t *offset) {
     ssize_t content_size = -1;
@@ -135,7 +144,9 @@ int ftp_fs_iterate(struct file* f, struct dir_context* ctx) {
 			pr_debug("the fake dentry name is %s\n", files[i].name);
 
 			struct dentry *fake_dentry = d_alloc_name(dentry, files[i].name);
+			d_set_d_op(dentry, &simple_dentry_operations);
 			d_add(fake_dentry, NULL);
+
 			if (fake_dentry == NULL) {
 				pr_debug("can not allocate a fake dentry for ls\n");
 				result = -1;
@@ -176,8 +187,7 @@ out:
 		struct fake_dentry_list *ptr;
 		for (ptr = fake_dentry_head; ptr;) {
 			pr_debug("    %s\n", ptr->dentry->d_name.name);
-			drop_nlink(ptr->dentry->d_inode);
-			dput(ptr->dentry);
+			simple_unlink(dentry->d_inode, ptr->dentry);
 			struct fake_dentry_list *next = ptr->next;
 			kfree(ptr);
 			ptr = next;
@@ -196,3 +206,11 @@ error0:
 	pr_debug("iterate result is %d\n", result);
     return result;
 }
+
+int ftp_fs_dir_open(struct inode* inode, struct file* file) {
+	pr_debug("opened file\n");
+	static struct qstr cursor_name = QSTR_INIT(".", 1);
+	file->private_data = d_alloc(file->f_path.dentry, &cursor_name);
+	return file->private_data ? 0 : -ENOMEM;
+}
+
