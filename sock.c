@@ -56,8 +56,8 @@ int sock_readline(struct socket *sock, char **buf) {
 			return ret < 0 ? -1 : 0;
 		}
 		read++;
-		if (*buf[read - 1] == '\n') {
-			buf[read] = 0;
+		if ((*buf)[read - 1] == '\n') {
+			(*buf)[read] = 0;
 			return read;
 		}
 		if (read == size - 1) {
