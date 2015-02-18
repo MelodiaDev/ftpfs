@@ -185,7 +185,12 @@ int ftp_fs_dir_open(struct inode* inode, struct file* file) {
 }
 
 int ftp_fs_close(struct inode* inode, struct file* file) {
-	ftp_close_file((struct ftp_info*) inode->i_sb->s_fs_info, file->f_dentry->d_name.name);
+    char *path_buf = (char*) kmalloc(MAX_PATH_LEN, GFP_KERNEL);
+    if (path_buf == NULL)
+		return 0;
+    char *full_path = dentry_path_raw(file->f_dentry, path_buf, MAX_PATH_LEN);
+	ftp_close_file((struct ftp_info*) inode->i_sb->s_fs_info, full_path);
+	kfree(path_buf);
 	return 0;
 }
 

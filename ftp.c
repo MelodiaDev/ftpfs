@@ -127,14 +127,13 @@ static void ftp_conn_data_close(struct ftp_conn_info *conn) {
 	int ret;
 	if (conn->data_sock == NULL)
 		return;
+	pr_debug("closed: %s\n", conn->cmd);
+	sock_release(conn->data_sock);
+	kfree(conn->cmd);
+	conn->data_sock = NULL;
 	if (ftp_conn_send(conn, "ABOR") < 0 || ((ret = ftp_conn_recv(conn, NULL)) != 426 && ret != 226 && ret != 225)
 			|| (ret != 225 && (ret = ftp_conn_recv(conn, NULL)) != 225 && ret != 226))
 		ftp_conn_close(conn);
-	else {
-		sock_release(conn->data_sock);
-		kfree(conn->cmd);
-		conn->data_sock = NULL;
-	}
 }
 
 static int ftp_conn_connect(struct ftp_info *info, struct ftp_conn_info *conn) {
@@ -232,16 +231,18 @@ static void ftp_find_conn(struct ftp_info *info, const char *cmd, unsigned long 
 				up(&info->mutex);
 				return;
 			}
-		if (strncmp(cmd, "STOR", 4) == 0)
-			for (i = 0; i < info->max_sock; i++)
-				if (info->conn_list[i].used == 0 && info->conn_list[i].data_sock != NULL
-						&& strcmp(info->conn_list[i].cmd, cmd) == 0) {
-					info->conn_list[i].used = 1;
-					up(&info->mutex);
-					ftp_conn_data_close(&info->conn_list[i]);
-					down(&info->mutex);
-					info->conn_list[i].used = 0;
-				}
+		for (i = 0; i < info->max_sock; i++)
+			if (info->conn_list[i].used == 0 && info->conn_list[i].data_sock != NULL
+					&& ((strncmp(info->conn_list[i].cmd, cmd, 4) != 0
+							&& strcmp(info->conn_list[i].cmd + 7, cmd + 7) == 0)
+						|| (strncmp(cmd, "STOR", 4) == 0
+							&& strcmp(info->conn_list[i].cmd, cmd) == 0))) {
+				info->conn_list[i].used = 1;
+				up(&info->mutex);
+				ftp_conn_data_close(&info->conn_list[i]);
+				down(&info->mutex);
+				info->conn_list[i].used = 0;
+			}
 	}
 	for (i = 0; i < info->max_sock; i++)
 		if (info->conn_list[i].used == 0 && info->conn_list[i].data_sock == NULL) {
@@ -374,7 +375,6 @@ void ftp_close_file(struct ftp_info *info, const char *file) {
 	down(&info->mutex);
 	for (i = 0; i < info->max_sock; i++)
 		if (info->conn_list[i].used == 0 && info->conn_list[i].data_sock != NULL
-				&& strncmp(info->conn_list[i].cmd, "STOR", 4) == 0
 				&& strcmp(info->conn_list[i].cmd + 7, file) == 0) {
 			info->conn_list[i].used = 1;
 			up(&info->mutex);
