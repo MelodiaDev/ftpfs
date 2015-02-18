@@ -10,6 +10,7 @@
 const struct file_operations ftp_fs_file_operations = {
     .read = ftp_fs_read,
     .write = ftp_fs_write,
+	.release = ftp_fs_close,
 };
 
 const struct file_operations ftp_fs_dir_operations = {
@@ -181,5 +182,10 @@ int ftp_fs_dir_open(struct inode* inode, struct file* file) {
 	static struct qstr cursor_name = QSTR_INIT(".", 1);
 	file->private_data = d_alloc(file->f_path.dentry, &cursor_name);
 	return file->private_data ? 0 : -ENOMEM;
+}
+
+int ftp_fs_close(struct inode* inode, struct file* file) {
+	ftp_close_file((struct ftp_info*) inode->i_sb->s_fs_info, file->f_dentry->d_name.name);
+	return 0;
 }
 
