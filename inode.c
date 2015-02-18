@@ -1,7 +1,9 @@
 #include "ftpfs.h"
+#include "ftp.h"
 #include "inode.h"
 #include "super.h"
 #include "file.h"
+#include <linux/mount.h>
 
 const struct inode_operations ftp_fs_file_inode_operations = {
     .setattr = simple_setattr,
@@ -10,7 +12,7 @@ const struct inode_operations ftp_fs_file_inode_operations = {
 
 const struct inode_operations ftp_fs_dir_inode_operations = {
     .create = ftp_fs_create,
-    .lookup = simple_lookup,
+    .lookup = ftp_fs_lookup,
 	.mknod = ftp_fs_mknod,
 	.link = simple_link,
 	.unlink = simple_unlink,
@@ -58,5 +60,58 @@ int ftp_fs_mknod(struct inode* dir, struct dentry* dentry, umode_t mode, dev_t d
 		dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 	}
 	return error;
+}
+
+struct dentry* ftp_fs_lookup(struct inode* inode, struct dentry* dentry, unsigned int flags) {
+	struct inode* target = NULL;
+
+	pr_debug("process lookup %s\n", dentry->d_name.name);
+	if (dentry->d_name.len > NAME_MAX)
+		return ERR_PTR(-ENAMETOOLONG);
+	if (!dentry->d_sb->s_d_op)
+		d_set_d_op(dentry, &simple_dentry_operations);
+
+	struct dentry *d = list_entry(inode->i_dentry.first, struct dentry, d_alias);
+	char *filename = dentry->d_name.name;
+	char *filebuf = (char*) kmalloc(MAX_PATH_LEN, GFP_KERNEL);
+	if (filebuf == NULL) {
+		pr_debug("allocate filebuf failed\n");
+		goto out;
+	}
+	char *file_path = dentry_path_raw(d, filebuf, MAX_PATH_LEN);
+	if (file_path == NULL) {
+		pr_debug("calculate file path failed\n");
+		goto error;
+	}
+	pr_debug("@lookup full path name %s\n", filename);
+
+	int result = -1;
+	unsigned long file_num;
+	struct ftp_file_info *files;
+
+	if ((result = ftp_read_dir((struct ftp_info*) inode->i_sb->s_fs_info, file_path, &file_num, &files)) == 0) {
+		pr_debug("got %lu file\n", file_num);
+		int i;
+		for (i = 2; i < file_num; i++) if (strcmp(filename, files[i].name) == 0) {
+			pr_debug("got this file\n");
+			if ((target = ftp_fs_get_inode(inode->i_sb, inode, files[i].mode, 0)) == NULL) {
+				pr_debug("can not allocate a inode\n");
+				goto error;
+			}
+			/* missing m_time (need format converting) */
+			target->i_size = files[i].size;
+
+			pr_debug("new inode done\n");
+			break;
+		}
+	}
+
+error:
+	if (filebuf) kfree(filebuf);
+	pr_debug("freed filebuf\n");
+out:
+	d_add(dentry, target);
+	pr_debug("add dentry\n");
+	return NULL;
 }
 
