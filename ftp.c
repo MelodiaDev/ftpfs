@@ -73,6 +73,7 @@ static int ftp_conn_send(struct ftp_conn_info *conn, const char *cmd) {
 			goto error1;
 		sent += ret;
 	}
+	kfree(buf);
 	return 0;
 
 error1:
@@ -85,7 +86,7 @@ error0:
 static int ftp_conn_recv(struct ftp_conn_info *conn, char **resp) {
 	char *buf, *buf2;
 	int ret = sock_readline(conn->control_sock, &buf), code;
-	if (ret < 0)
+	if (ret <= 0)
 		goto error0;
 	if (ret < 6 || (buf[3] != ' ' && buf[3] != '-')
 			|| !isdigit(buf[0]) || !isdigit(buf[1]) || !isdigit(buf[2])
@@ -103,7 +104,7 @@ static int ftp_conn_recv(struct ftp_conn_info *conn, char **resp) {
 				kfree(buf2);
 				return code;
 			}
-			if (ret < 0)
+			if (ret <= 0)
 				goto error1;
 			kfree(buf2);
 		}
@@ -124,8 +125,10 @@ error0:
 
 static void ftp_conn_data_close(struct ftp_conn_info *conn) {
 	int ret;
-	if (ftp_conn_send(conn, "ABOR") < 0 || ((ret = ftp_conn_recv(conn, NULL)) != 426 && ret != 226)
-			|| ((ret = ftp_conn_recv(conn, NULL)) != 225 && ret != 226))
+	if (conn->data_sock == NULL)
+		return;
+	if (ftp_conn_send(conn, "ABOR") < 0 || ((ret = ftp_conn_recv(conn, NULL)) != 426 && ret != 226 && ret != 225)
+			|| (ret != 225 && (ret = ftp_conn_recv(conn, NULL)) != 225 && ret != 226))
 		ftp_conn_close(conn);
 	else {
 		sock_release(conn->data_sock);
@@ -143,7 +146,7 @@ static int ftp_conn_connect(struct ftp_info *info, struct ftp_conn_info *conn) {
 		bufsize = tmp;
 	if (sock_create(AF_INET, SOCK_STREAM, 0, &conn->control_sock) < 0)
 		goto error0;
-	pr_debug("sock created, connecting to %u,%d", info->addr.sin_addr.s_addr, info->addr.sin_port);
+	pr_debug("sock created, connecting to %u,%d\n", info->addr.sin_addr.s_addr, info->addr.sin_port);
 	if (conn->control_sock->ops->connect(conn->control_sock, (struct sockaddr*)&info->addr, sizeof(struct sockaddr_in), 0) < 0)
 		goto error1;
 	pr_debug("connected to server\n");
@@ -208,7 +211,7 @@ static int ftp_conn_open_pasv(struct ftp_conn_info *conn) {
 		goto error0;
 	if (conn->data_sock->ops->connect(conn->data_sock, (struct sockaddr*)&data_addr, sizeof(struct sockaddr_in), 0) < 0)
 		goto error1;
-	pr_debug("connected to pasv port, pasv succeeded");
+	pr_debug("connected to pasv port, pasv succeeded\n");
 	return 0;
 
 error1:
@@ -220,7 +223,7 @@ error0:
 static void ftp_find_conn(struct ftp_info *info, const char *cmd, unsigned long offset, struct ftp_conn_info **conn) {
 	int i;
 	down(&info->mutex);
-	if (cmd != NULL)
+	if (cmd != NULL) {
 		for (i = 0; i < info->max_sock; i++)
 			if (info->conn_list[i].used == 0 && info->conn_list[i].data_sock != NULL
 					&& strcmp(info->conn_list[i].cmd, cmd) == 0 && info->conn_list[i].offset == offset) {
@@ -229,6 +232,12 @@ static void ftp_find_conn(struct ftp_info *info, const char *cmd, unsigned long 
 				up(&info->mutex);
 				return;
 			}
+		if (strncmp(cmd, "STOR", 4) == 0)
+			for (i = 0; i < info->max_sock; i++)
+				if (info->conn_list[i].used == 0 && info->conn_list[i].data_sock != NULL
+						&& strcmp(info->conn_list[i].cmd, cmd) == 0)
+					ftp_conn_data_close(&info->conn_list[i]);
+	}
 	for (i = 0; i < info->max_sock; i++)
 		if (info->conn_list[i].used == 0 && info->conn_list[i].data_sock == NULL) {
 			info->conn_list[i].used = 1;
@@ -309,7 +318,7 @@ int ftp_read_file(struct ftp_info *info, const char *file, unsigned long offset,
 	int ret;
 	if (cmd == NULL)
 		goto error0;
-	sprintf(cmd, "STOR ./%s", file);
+	sprintf(cmd, "RETR ./%s", file);
 	if (ftp_request_conn_open_pasv(info, &conn, cmd, offset) < 0)
 		goto error1;
 	ret = sock_recv(conn->data_sock, buf, len);
@@ -317,6 +326,7 @@ int ftp_read_file(struct ftp_info *info, const char *file, unsigned long offset,
 		goto error2;
 	conn->offset += ret;
 	ftp_release_conn(info, conn);
+	kfree(cmd);
 	return ret;
 
 error2:
@@ -334,7 +344,7 @@ int ftp_write_file(struct ftp_info *info, const char *file, unsigned long offset
 	int ret;
 	if (cmd == NULL)
 		goto error0;
-	sprintf(cmd, "RETR ./%s", file);
+	sprintf(cmd, "STOR ./%s", file);
 	if (ftp_request_conn_open_pasv(info, &conn, cmd, offset) < 0)
 		goto error1;
 	ret = sock_send(conn->data_sock, buf, len);
@@ -342,6 +352,7 @@ int ftp_write_file(struct ftp_info *info, const char *file, unsigned long offset
 		goto error2;
 	conn->offset += ret;
 	ftp_release_conn(info, conn);
+	kfree(cmd);
 	return ret;
 
 error2:
@@ -353,6 +364,17 @@ error0:
 	return -1;
 }
 
+void ftp_close_file(struct ftp_info *info, const char *file) {
+	int i;
+	down(&info->mutex);
+	for (i = 0; i < info->max_sock; i++)
+		if (info->conn_list[i].used == 0 && info->conn_list[i].data_sock != NULL
+				&& strncmp(info->conn_list[i].cmd, "STOR", 4) == 0
+				&& strcmp(info->conn_list[i].cmd + 7, file) == 0)
+			ftp_conn_data_close(&info->conn_list[i]);
+	up(&info->mutex);
+}
+
 int ftp_read_dir(struct ftp_info *info, const char *path, unsigned long *len, struct ftp_file_info **files) {
 	static const char *months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 	struct ftp_conn_info *conn;
@@ -361,7 +383,7 @@ int ftp_read_dir(struct ftp_info *info, const char *path, unsigned long *len, st
 	unsigned long tmp_len, buf_len, tmp;
 	struct timeval time;
 	struct tm tm;
-	char *cmd = (char*)kmalloc(strlen(path) + 12, GFP_KERNEL), *line, *ptr, *next;
+	char *cmd = (char*)kmalloc(strlen(path) + 12, GFP_KERNEL), *line, *ptr, *next, next_backup;
 	if (cmd == NULL)
 		goto error0;
 	sprintf(cmd, "LIST -al ./%s", path);
@@ -373,15 +395,17 @@ int ftp_read_dir(struct ftp_info *info, const char *path, unsigned long *len, st
 
 	tmp_len = 0;
 	buf_len = 16;
-	tmp_files = (struct ftp_file_info*)kmalloc(16 * sizeof(struct ftp_file_info), GFP_KERNEL);
+	tmp_files = (struct ftp_file_info*)kmalloc(buf_len * sizeof(struct ftp_file_info), GFP_KERNEL);
 	if (tmp_files == NULL)
 		goto error2;
+	memset(tmp_files, 0, buf_len * sizeof(struct ftp_file_info));
 	while ((ret = sock_readline(conn->data_sock, &line)) > 0) {
 		if (tmp_len == buf_len) {
 			struct ftp_file_info *tmp_files2 = (struct ftp_file_info*)kmalloc(2 * buf_len * sizeof(struct ftp_file_info), GFP_KERNEL);
 			if (tmp_files2 == NULL)
 				goto error3;
 			memcpy(tmp_files2, tmp_files, buf_len * sizeof(struct ftp_file_info));
+			memset(tmp_files2 + buf_len, 0, buf_len * sizeof(struct ftp_file_info));
 			kfree(tmp_files);
 			tmp_files = tmp_files2;
 			buf_len *= 2;
@@ -394,6 +418,7 @@ int ftp_read_dir(struct ftp_info *info, const char *path, unsigned long *len, st
 				goto error4;
 			next = ptr;
 			for (; *next != 0 && *next != ' '; next++);
+			next_backup = *next;
 			*next = 0;
 			switch (i) {
 				case 0:
@@ -449,7 +474,7 @@ int ftp_read_dir(struct ftp_info *info, const char *path, unsigned long *len, st
 					tmp_files[tmp_len].mtime = mktime(year, month, day, hour, min, 0);
 					break;
 			}
-			*next = ' ';
+			*next = next_backup;
 			ptr = next;
 		}
 

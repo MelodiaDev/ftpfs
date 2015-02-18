@@ -89,7 +89,7 @@ static void _inet_aton(const char* ip, unsigned int *res) {
 	*res = 0;
     for (i = 0; i < 4; i++) *res |= s[i] << (8 * i);
     pr_debug("%u.%u.%u.%u\n", s[0], s[1], s[2], s[3]);
-    pr_debug("got the ip %lu\n", *res);
+    pr_debug("got the ip %u\n", *res);
 }
 
 struct sockaddr_in* cons_addr(const char* ip) {

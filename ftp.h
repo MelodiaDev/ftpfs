@@ -32,6 +32,7 @@ void ftp_info_destroy(struct ftp_info *info);
 void ftp_file_info_destroy(unsigned long len, struct ftp_file_info *files);
 int ftp_read_file(struct ftp_info *info, const char *file, unsigned long offset, char *buf, unsigned long len);
 int ftp_write_file(struct ftp_info *info, const char *file, unsigned long offset, const char *buf, unsigned long len);
+void ftp_close_file(struct ftp_info *info, const char *file);
 int ftp_read_dir(struct ftp_info *info, const char *path, unsigned long *len, struct ftp_file_info **files);
 int ftp_rename(struct ftp_info *info, const char *oldpath, const char *newpath);
 int ftp_create_file(struct ftp_info *info, const char *file);
