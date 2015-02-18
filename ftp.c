@@ -53,7 +53,8 @@ void ftp_file_info_destroy(unsigned long len, struct ftp_file_info *files) {
 static void ftp_conn_close(struct ftp_conn_info *conn) {
 	if (conn->data_sock != NULL) {
 		sock_release(conn->data_sock);
-		kfree(conn->cmd);
+		if (conn->cmd != NULL)
+			kfree(conn->cmd);
 	}
 	if (conn->control_sock != NULL)
 		sock_release(conn->control_sock);
@@ -129,8 +130,9 @@ static void ftp_conn_data_close(struct ftp_conn_info *conn) {
 		return;
 	pr_debug("closed: %s\n", conn->cmd);
 	sock_release(conn->data_sock);
-	kfree(conn->cmd);
 	conn->data_sock = NULL;
+	if (conn->cmd != NULL)
+		kfree(conn->cmd);
 	if (ftp_conn_send(conn, "ABOR") < 0 || ((ret = ftp_conn_recv(conn, NULL)) != 426 && ret != 226 && ret != 225)
 			|| (ret != 225 && (ret = ftp_conn_recv(conn, NULL)) != 225 && ret != 226))
 		ftp_conn_close(conn);
@@ -261,6 +263,13 @@ static void ftp_find_conn(struct ftp_info *info, const char *cmd, unsigned long 
 		}
 }
 
+static void ftp_release_conn(struct ftp_info *info, struct ftp_conn_info *conn) {
+	down(&info->mutex);
+	conn->used = 0;
+	up(&info->mutex);
+	up(&info->sem);
+}
+
 static int ftp_request_conn(struct ftp_info *info, struct ftp_conn_info **conn) {
 	struct ftp_conn_info *tmp_conn;
 	down(&info->sem);
@@ -271,7 +280,7 @@ static int ftp_request_conn(struct ftp_info *info, struct ftp_conn_info **conn) 
 	return 0;
 
 error:
-	up(&info->sem);
+	ftp_release_conn(info, tmp_conn);
 	return -1;
 }
 
@@ -288,6 +297,7 @@ static int ftp_request_conn_open_pasv(struct ftp_info *info, struct ftp_conn_inf
 		goto error0;
 	if (ftp_conn_open_pasv(tmp_conn) < 0)
 		goto error0;
+	tmp_conn->cmd = NULL;
 	if (offset) {
 		sprintf(buf, "REST %ld", offset);
 		if (ftp_conn_send(tmp_conn, buf) < 0 || ftp_conn_recv(tmp_conn, NULL) != 350)
@@ -307,15 +317,8 @@ static int ftp_request_conn_open_pasv(struct ftp_info *info, struct ftp_conn_inf
 error1:
 	ftp_conn_data_close(tmp_conn);
 error0:
-	up(&info->sem);
+	ftp_release_conn(info, tmp_conn);
 	return -1;
-}
-
-static void ftp_release_conn(struct ftp_info *info, struct ftp_conn_info *conn) {
-	down(&info->mutex);
-	conn->used = 0;
-	up(&info->mutex);
-	up(&info->sem);
 }
 
 int ftp_read_file(struct ftp_info *info, const char *file, unsigned long offset, char *buf, unsigned long len) {
