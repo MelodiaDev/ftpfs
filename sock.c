@@ -78,28 +78,28 @@ int sock_readline(struct socket *sock, char **buf) {
 }
 
 static unsigned short _htons(unsigned short port) {
-    unsigned short s0 = port & (unsigned short)0x00ff;
-    unsigned short s1 = port & (unsigned short)0xff00; 
-    pr_debug("got the port %lu\n", (s0 << 8) + s1);
-    return (s0 << 8) + s1;
+	unsigned short s0 = port & (unsigned short)0x00ff;
+	unsigned short s1 = port & (unsigned short)0xff00; 
+	pr_debug("got the port %lu\n", (s0 << 8) + s1);
+	return (s0 << 8) + s1;
 }
 
 static void _inet_aton(const char* ip, unsigned int *res) {
-    unsigned int s[4];
-    int i;
-    sscanf(ip, "%u.%u.%u.%u", s, s + 1, s + 2, s + 3);
+	unsigned int s[4];
+	int i;
+	sscanf(ip, "%u.%u.%u.%u", s, s + 1, s + 2, s + 3);
 	*res = 0;
-    for (i = 0; i < 4; i++) *res |= s[i] << (8 * i);
-    pr_debug("%u.%u.%u.%u\n", s[0], s[1], s[2], s[3]);
-    pr_debug("got the ip %u\n", *res);
+	for (i = 0; i < 4; i++) *res |= s[i] << (8 * i);
+	pr_debug("%u.%u.%u.%u\n", s[0], s[1], s[2], s[3]);
+	pr_debug("got the ip %u\n", *res);
 }
 
 struct sockaddr_in* cons_addr(const char* ip) {
-    struct sockaddr_in *addr = kmalloc(sizeof(struct sockaddr_in), GFP_KERNEL);
-    if (addr) {
-        addr->sin_family = AF_INET;
-        addr->sin_port = _htons(FTP_PORT);
-        _inet_aton(ip, &addr->sin_addr.s_addr);
-    }
-    return addr;
+	struct sockaddr_in *addr = kmalloc(sizeof(struct sockaddr_in), GFP_KERNEL);
+	if (addr) {
+		addr->sin_family = AF_INET;
+		addr->sin_port = _htons(FTP_PORT);
+		_inet_aton(ip, &addr->sin_addr.s_addr);
+	}
+	return addr;
 }
