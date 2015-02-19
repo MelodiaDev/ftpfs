@@ -45,11 +45,13 @@ int sock_recv(struct socket *sock, void *buf, int size) {
 int sock_readline(struct socket *sock, char **buf) {
 	int size = 4096, read = 0, ret;
 	char *tmp;
+	/* allocate an initial buffer of size 4096 */
 	*buf = kmalloc(size, GFP_KERNEL);
 	if (*buf == NULL)
 		return -1;
 
 	while (1) {
+		/* read 1 char every time */
 		ret = sock_recv(sock, *buf + read, 1);
 		if (ret <= 0) {
 			kfree(*buf);
@@ -60,11 +62,11 @@ int sock_readline(struct socket *sock, char **buf) {
 			(*buf)[read] = 0;
 			return read;
 		}
+		/* not enough space, allocate a buffer of doubled size and copy data */
 		if (read == size - 1) {
 			tmp = kmalloc(size * 2, GFP_KERNEL);
 			if (tmp == NULL) {
 				kfree(*buf);
-				//TODO: debug
 				return -1;
 			}
 			memcpy(tmp, *buf, read);
