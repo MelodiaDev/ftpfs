@@ -15,12 +15,16 @@ int ftp_fs_fill_super(struct super_block *sb, void *data, int silent) {
 
     pr_debug("begin ftp_fs_fill_super\n");
 
+    /* set init infomation for the super block */
     sb->s_maxbytes = MAX_LFS_FILESIZE;
     sb->s_blocksize = PAGE_CACHE_SIZE;
     sb->s_blocksize_bits = PAGE_CACHE_SHIFT;
     sb->s_magic = FTP_FS_MAGIC;
     sb->s_op = &ftp_fs_ops;
     sb->s_time_gran = 1;
+
+    /* initialize the gloabl ftp_info including the socket informations
+     * and point the sb->s_fs_info to it */
 
     struct sockaddr_in *addr = cons_addr(FTP_IP);
     if (addr == NULL) return -1;
@@ -32,6 +36,7 @@ int ftp_fs_fill_super(struct super_block *sb, void *data, int silent) {
 
     sb->s_fs_info = ftp_info;
 
+    /* get a inode ref for the super block */
     pr_debug("try to fetch a inode to store super block\n");
     inode = ftp_fs_get_inode(sb, NULL, S_IFDIR, 0);
     sb->s_root = d_make_root(inode);
@@ -45,6 +50,7 @@ struct dentry* ftp_fs_mount(struct file_system_type *fs_type, int flags, const c
 }
 
 void ftp_fs_umount(struct super_block *sb) {
+    /* free the ftp_info struct */
     if (sb->s_fs_info) kfree(sb->s_fs_info);
     kill_litter_super(sb);
 }

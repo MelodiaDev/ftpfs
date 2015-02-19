@@ -7,6 +7,7 @@
 int __init ftpfs_init(void) {
     pr_debug("ftpfs module loaded\n");
 
+    /* register the file system */
     register_filesystem(&ftp_fs_type);
     return 0;
 }
@@ -14,6 +15,7 @@ int __init ftpfs_init(void) {
 void __exit ftpfs_fini(void) {
     pr_debug("ftpfs module unloaded\n");
 
+    /* unregister the file system */
     unregister_filesystem(&ftp_fs_type);
 }
 

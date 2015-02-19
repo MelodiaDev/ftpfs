@@ -19,20 +19,24 @@ const struct inode_operations ftp_fs_dir_inode_operations = {
 };
 
 struct inode* ftp_fs_get_inode(struct super_block *sb, const struct inode* dir, umode_t mode, dev_t dev) {
+    /* allocate a inode */
     struct inode* inode = new_inode(sb);
     if (inode) {
         inode->i_ino = get_next_ino();
+        /* initialize the owener */
         inode_init_owner(inode, dir, mode);
         inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 
         switch (mode & S_IFMT) {
             case S_IFREG:
                 pr_debug("got a regular inode\n");
+                /* the operations of this inode as the file operations */
                 inode->i_op = &ftp_fs_file_inode_operations;
                 inode->i_fop = &ftp_fs_file_operations;
                 break;
             case S_IFDIR:
                 pr_debug("got a dir inode\n");
+                /* the operations of this inode as the dir operations */
                 inode->i_op = &ftp_fs_dir_inode_operations;
                 inode->i_fop = &ftp_fs_dir_operations;
                 break;
@@ -50,10 +54,12 @@ int ftp_fs_create(struct inode *dir, struct dentry *dentry, umode_t mode, bool e
 }
 
 int ftp_fs_mknod(struct inode* dir, struct dentry* dentry, umode_t mode, dev_t dev) {
+    /* get the inode */
     struct inode* inode = ftp_fs_get_inode(dir->i_sb, dir, mode, dev);
     int error = -ENOSPC;
 
     if (inode) {
+        /* instantiate the dentry with this inode */
         d_instantiate(dentry, inode);
         dget(dentry);
         error = 0;
@@ -71,6 +77,7 @@ struct dentry* ftp_fs_lookup(struct inode* inode, struct dentry* dentry, unsigne
     if (!dentry->d_sb->s_d_op)
         d_set_d_op(dentry, &simple_dentry_operations);
 
+    /* got the full path from inode */
     struct dentry *d = list_entry(inode->i_dentry.first, struct dentry, d_alias);
     char *filename = dentry->d_name.name;
     char *filebuf = (char*) kmalloc(MAX_PATH_LEN, GFP_KERNEL);
@@ -89,6 +96,8 @@ struct dentry* ftp_fs_lookup(struct inode* inode, struct dentry* dentry, unsigne
     unsigned long file_num;
     struct ftp_file_info *files;
 
+    /* fetch the dir content from the server and the look up the file in the content. If it exists, then allocate a dentry cache for it 
+     * if not, the target is set as NULL and d_add it */
     if ((result = ftp_read_dir((struct ftp_info*) inode->i_sb->s_fs_info, file_path, &file_num, &files)) == 0) {
         pr_debug("got %lu file\n", file_num);
         int i;
@@ -99,7 +108,7 @@ struct dentry* ftp_fs_lookup(struct inode* inode, struct dentry* dentry, unsigne
                 goto error;
             }
             /* missing m_time (need format converting) */
-            target->i_size = files[i].size;
+            if (target) target->i_size = files[i].size;
 
             pr_debug("new inode done\n");
             break;
