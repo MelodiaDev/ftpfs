@@ -5,86 +5,86 @@
 #include <linux/time.h>
 
 int ftp_info_init(struct ftp_info **info, struct sockaddr_in addr, const char *user, const char *pass, int max_sock) {
-	*info = (struct ftp_info*)kmalloc(sizeof(struct ftp_info), GFP_KERNEL);
-	if (*info == NULL)
-		goto error0;
-	(*info)->user = (char*)kmalloc(strlen(user) + 1, GFP_KERNEL);
-	if ((*info)->user == NULL)
-		goto error1;
-	(*info)->pass = (char*)kmalloc(strlen(pass) + 1, GFP_KERNEL);
-	if ((*info)->pass == NULL)
-		goto error2;
-	(*info)->conn_list = (struct ftp_conn_info*)kmalloc(sizeof(struct ftp_conn_info) * max_sock, GFP_KERNEL);
-	if ((*info)->conn_list == NULL)
-		goto error3;
-	memcpy(&(*info)->addr, &addr, sizeof(struct sockaddr_in));
-	strcpy((*info)->user, user);
-	strcpy((*info)->pass, pass);
-	(*info)->max_sock = max_sock;
-	memset((*info)->conn_list, 0, sizeof(struct ftp_conn_info) * max_sock);
-	sema_init(&(*info)->sem, max_sock);
-	sema_init(&(*info)->mutex, 1);
-	return 0;
+    *info = (struct ftp_info*)kmalloc(sizeof(struct ftp_info), GFP_KERNEL);
+    if (*info == NULL)
+        goto error0;
+    (*info)->user = (char*)kmalloc(strlen(user) + 1, GFP_KERNEL);
+    if ((*info)->user == NULL)
+        goto error1;
+    (*info)->pass = (char*)kmalloc(strlen(pass) + 1, GFP_KERNEL);
+    if ((*info)->pass == NULL)
+        goto error2;
+    (*info)->conn_list = (struct ftp_conn_info*)kmalloc(sizeof(struct ftp_conn_info) * max_sock, GFP_KERNEL);
+    if ((*info)->conn_list == NULL)
+        goto error3;
+    memcpy(&(*info)->addr, &addr, sizeof(struct sockaddr_in));
+    strcpy((*info)->user, user);
+    strcpy((*info)->pass, pass);
+    (*info)->max_sock = max_sock;
+    memset((*info)->conn_list, 0, sizeof(struct ftp_conn_info) * max_sock);
+    sema_init(&(*info)->sem, max_sock);
+    sema_init(&(*info)->mutex, 1);
+    return 0;
 
 error3:
-	kfree((*info)->pass);
+    kfree((*info)->pass);
 error2:
-	kfree((*info)->user);
+    kfree((*info)->user);
 error1:
-	kfree(*info);
+    kfree(*info);
 error0:
-	return -1;
+    return -1;
 }
 
 void ftp_info_destroy(struct ftp_info *info) {
-	kfree(info->user);
-	kfree(info->pass);
-	kfree(info->conn_list);
-	kfree(info);
+    kfree(info->user);
+    kfree(info->pass);
+    kfree(info->conn_list);
+    kfree(info);
 }
 
 void ftp_file_info_destroy(unsigned long len, struct ftp_file_info *files) {
-	unsigned long i = 0;
-	for (; i < len; i++)
-		kfree(files[i].name);
-	kfree(files);
+    unsigned long i = 0;
+    for (; i < len; i++)
+        kfree(files[i].name);
+    kfree(files);
 }
 
 /* Close a session. */
 static void ftp_conn_close(struct ftp_conn_info *conn) {
-	if (conn->data_sock != NULL) {
-		sock_release(conn->data_sock);
-		if (conn->cmd != NULL)
-			kfree(conn->cmd);
-	}
-	if (conn->control_sock != NULL)
-		sock_release(conn->control_sock);
-	conn->control_sock = conn->data_sock = NULL;
+    if (conn->data_sock != NULL) {
+        sock_release(conn->data_sock);
+        if (conn->cmd != NULL)
+            kfree(conn->cmd);
+    }
+    if (conn->control_sock != NULL)
+        sock_release(conn->control_sock);
+    conn->control_sock = conn->data_sock = NULL;
 }
 
 /* Send an FTP command. Return 0 for success and negative value for error.
  * If there is an error in connection, this session is closed. */
 static int ftp_conn_send(struct ftp_conn_info *conn, const char *cmd) {
-	int len, sent = 0, ret;
-	char *buf = (char*)kmalloc(strlen(cmd) + 3, GFP_KERNEL);
-	if (buf == NULL)
-		goto error0;
-	sprintf(buf, "%s\r\n", cmd);
-	len = strlen(buf);
-	while (sent < len) {
-		ret = sock_send(conn->control_sock, buf + sent, len - sent);
-		if (ret < 0)
-			goto error1;
-		sent += ret;
-	}
-	kfree(buf);
-	return 0;
+    int len, sent = 0, ret;
+    char *buf = (char*)kmalloc(strlen(cmd) + 3, GFP_KERNEL);
+    if (buf == NULL)
+        goto error0;
+    sprintf(buf, "%s\r\n", cmd);
+    len = strlen(buf);
+    while (sent < len) {
+        ret = sock_send(conn->control_sock, buf + sent, len - sent);
+        if (ret < 0)
+            goto error1;
+        sent += ret;
+    }
+    kfree(buf);
+    return 0;
 
 error1:
-	kfree(buf);
+    kfree(buf);
 error0:
-	ftp_conn_close(conn);
-	return -1;
+    ftp_conn_close(conn);
+    return -1;
 }
 
 /* Receive an FTP response. Return the status code for success and negative
@@ -128,27 +128,27 @@ static int ftp_conn_recv(struct ftp_conn_info *conn, char **resp) {
 	}
 
 error1:
-	kfree(buf);
+    kfree(buf);
 error0:
-	ftp_conn_close(conn);
-	return -1;
+    ftp_conn_close(conn);
+    return -1;
 }
 
 /* Close the data transfer connection. After closing the connection, this
  * function sends an ABOR command for confirmation, and if this transaction
  * is not successful, the whole session is closed. */
 static void ftp_conn_data_close(struct ftp_conn_info *conn) {
-	int ret;
-	if (conn->data_sock == NULL)
-		return;
-	pr_debug("closed: %s\n", conn->cmd);
-	sock_release(conn->data_sock);
-	conn->data_sock = NULL;
-	if (conn->cmd != NULL)
-		kfree(conn->cmd);
-	if (ftp_conn_send(conn, "ABOR") < 0 || ((ret = ftp_conn_recv(conn, NULL)) != 426 && ret != 226 && ret != 225)
-			|| (ret != 225 && (ret = ftp_conn_recv(conn, NULL)) != 225 && ret != 226))
-		ftp_conn_close(conn);
+    int ret;
+    if (conn->data_sock == NULL)
+        return;
+    pr_debug("closed: %s\n", conn->cmd);
+    sock_release(conn->data_sock);
+    conn->data_sock = NULL;
+    if (conn->cmd != NULL)
+        kfree(conn->cmd);
+    if (ftp_conn_send(conn, "ABOR") < 0 || ((ret = ftp_conn_recv(conn, NULL)) != 426 && ret != 226 && ret != 225)
+            || (ret != 225 && (ret = ftp_conn_recv(conn, NULL)) != 225 && ret != 226))
+        ftp_conn_close(conn);
 }
 
 /* Connect to the FTP server, log in and set other stuffs. Return 0 for success
@@ -193,11 +193,11 @@ static int ftp_conn_connect(struct ftp_info *info, struct ftp_conn_info *conn) {
 	return 0;
 
 error2:
-	kfree(buf);
+    kfree(buf);
 error1:
-	ftp_conn_close(conn);
+    ftp_conn_close(conn);
 error0:
-	return -1;
+    return -1;
 }
 
 /* Open data transfer connection in PASV mode. Return 0 for success and
@@ -240,9 +240,9 @@ static int ftp_conn_open_pasv(struct ftp_conn_info *conn) {
 	return 0;
 
 error1:
-	ftp_conn_data_close(conn);
+    ftp_conn_data_close(conn);
 error0:
-	return -1;
+    return -1;
 }
 
 /* Find a session to use. If <cmd> is not NULL, it means that data transfer
@@ -300,10 +300,10 @@ static void ftp_find_conn(struct ftp_info *info, const char *cmd, unsigned long 
 
 /* Release a session resource. */
 static void ftp_release_conn(struct ftp_info *info, struct ftp_conn_info *conn) {
-	down(&info->mutex);
-	conn->used = 0;
-	up(&info->mutex);
-	up(&info->sem);
+    down(&info->mutex);
+    conn->used = 0;
+    up(&info->mutex);
+    up(&info->sem);
 }
 
 /* Request a session resource. This session should be established. On success,
@@ -321,8 +321,8 @@ static int ftp_request_conn(struct ftp_info *info, struct ftp_conn_info **conn) 
 	return 0;
 
 error:
-	ftp_release_conn(info, tmp_conn);
-	return -1;
+    ftp_release_conn(info, tmp_conn);
+    return -1;
 }
 
 /* Request a session resource. This session should be established and also its
@@ -367,10 +367,10 @@ static int ftp_request_conn_open_pasv(struct ftp_info *info, struct ftp_conn_inf
 	return 0;
 
 error1:
-	ftp_conn_data_close(tmp_conn);
+    ftp_conn_data_close(tmp_conn);
 error0:
-	ftp_release_conn(info, tmp_conn);
-	return -1;
+    ftp_release_conn(info, tmp_conn);
+    return -1;
 }
 
 int ftp_read_file(struct ftp_info *info, const char *file, unsigned long offset, char *buf, unsigned long len) {
@@ -399,9 +399,9 @@ error2:
 	ftp_conn_data_close(conn);
 	ftp_release_conn(info, conn);
 error1:
-	kfree(cmd);
+    kfree(cmd);
 error0:
-	return -1;
+    return -1;
 }
 
 int ftp_write_file(struct ftp_info *info, const char *file, unsigned long offset, const char *buf, unsigned long len) {
@@ -423,12 +423,12 @@ int ftp_write_file(struct ftp_info *info, const char *file, unsigned long offset
 	return ret;
 
 error2:
-	ftp_conn_data_close(conn);
-	ftp_release_conn(info, conn);
+    ftp_conn_data_close(conn);
+    ftp_release_conn(info, conn);
 error1:
-	kfree(cmd);
+    kfree(cmd);
 error0:
-	return -1;
+    return -1;
 }
 
 void ftp_close_file(struct ftp_info *info, const char *file) {
@@ -604,16 +604,16 @@ int ftp_read_dir(struct ftp_info *info, const char *path, unsigned long *len, st
 	return 0;
 
 error4:
-	kfree(line);
+    kfree(line);
 error3:
-	ftp_file_info_destroy(tmp_len, tmp_files);
+    ftp_file_info_destroy(tmp_len, tmp_files);
 error2:
-	ftp_conn_data_close(conn);
-	ftp_release_conn(info, conn);
+    ftp_conn_data_close(conn);
+    ftp_release_conn(info, conn);
 error1:
-	kfree(cmd);
+    kfree(cmd);
 error0:
-	return -1;
+    return -1;
 }
 
 int ftp_rename(struct ftp_info *info, const char *oldpath, const char *newpath) {
@@ -641,11 +641,11 @@ int ftp_rename(struct ftp_info *info, const char *oldpath, const char *newpath) 
 	return 0;
 
 error2:
-	ftp_release_conn(info, conn);
+    ftp_release_conn(info, conn);
 error1:
-	kfree(cmd);
+    kfree(cmd);
 error0:
-	return -1;
+    return -1;
 }
 
 int ftp_create_file(struct ftp_info *info, const char *file) {
@@ -665,11 +665,11 @@ int ftp_create_file(struct ftp_info *info, const char *file) {
 	return 0;
 
 error2:
-	ftp_release_conn(info, conn);
+    ftp_release_conn(info, conn);
 error1:
-	kfree(cmd);
+    kfree(cmd);
 error0:
-	return -1;
+    return -1;
 }
 
 int ftp_remove_file(struct ftp_info *info, const char *file) {
@@ -688,11 +688,11 @@ int ftp_remove_file(struct ftp_info *info, const char *file) {
 	return 0;
 
 error2:
-	ftp_release_conn(info, conn);
+    ftp_release_conn(info, conn);
 error1:
-	kfree(cmd);
+    kfree(cmd);
 error0:
-	return -1;
+    return -1;
 }
 
 int ftp_create_dir(struct ftp_info *info, const char *path) {
@@ -711,11 +711,11 @@ int ftp_create_dir(struct ftp_info *info, const char *path) {
 	return 0;
 
 error2:
-	ftp_release_conn(info, conn);
+    ftp_release_conn(info, conn);
 error1:
-	kfree(cmd);
+    kfree(cmd);
 error0:
-	return -1;
+    return -1;
 }
 
 int ftp_remove_dir(struct ftp_info *info, const char *path) {
@@ -734,9 +734,9 @@ int ftp_remove_dir(struct ftp_info *info, const char *path) {
 	return 0;
 
 error2:
-	ftp_release_conn(info, conn);
+    ftp_release_conn(info, conn);
 error1:
-	kfree(cmd);
+    kfree(cmd);
 error0:
-	return -1;
+    return -1;
 }

@@ -40,11 +40,11 @@ struct ftp_info {
 /* Information about a file item returned by ftp_read_file(), including
  * name, mode, number of links, file size, and last modified time. */
 struct ftp_file_info {
-	char *name;
-	umode_t mode;
-	nlink_t nlink;
-	off_t size;
-	time_t mtime;
+    char *name;
+    umode_t mode;
+    nlink_t nlink;
+    off_t size;
+    time_t mtime;
 };
 
 /* Allocate space for global info and initialize it using provided arguments. */

@@ -7,39 +7,39 @@
 #include <linux/in.h>
 
 int sock_send(struct socket *sock, const void *buf, int len) {
-	struct iovec iov;
-	struct msghdr msg;
-	int ret;
-	mm_segment_t old_fs = get_fs();
-	set_fs(get_ds());
+    struct iovec iov;
+    struct msghdr msg;
+    int ret;
+    mm_segment_t old_fs = get_fs();
+    set_fs(get_ds());
 
-	iov.iov_base = (void*)buf;
-	iov.iov_len = len;
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	ret = sock_sendmsg(sock, &msg, len);
+    iov.iov_base = (void*)buf;
+    iov.iov_len = len;
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    ret = sock_sendmsg(sock, &msg, len);
 
-	set_fs(old_fs);
-	return ret;
+    set_fs(old_fs);
+    return ret;
 }
 
 int sock_recv(struct socket *sock, void *buf, int size) {
-	struct iovec iov;
-	struct msghdr msg;
-	int ret;
-	mm_segment_t old_fs = get_fs();
-	set_fs(get_ds());
+    struct iovec iov;
+    struct msghdr msg;
+    int ret;
+    mm_segment_t old_fs = get_fs();
+    set_fs(get_ds());
 
-	iov.iov_base = buf;
-	iov.iov_len = size;
-	memset(&msg, 0, sizeof(msg));
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	ret = sock_recvmsg(sock, &msg, size, 0);
+    iov.iov_base = buf;
+    iov.iov_len = size;
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    ret = sock_recvmsg(sock, &msg, size, 0);
 
-	set_fs(old_fs);
-	return ret;
+    set_fs(old_fs);
+    return ret;
 }
 
 int sock_readline(struct socket *sock, char **buf) {
@@ -85,13 +85,13 @@ static unsigned short _htons(unsigned short port) {
 }
 
 static void _inet_aton(const char* ip, unsigned int *res) {
-	unsigned int s[4];
-	int i;
-	sscanf(ip, "%u.%u.%u.%u", s, s + 1, s + 2, s + 3);
-	*res = 0;
-	for (i = 0; i < 4; i++) *res |= s[i] << (8 * i);
-	pr_debug("%u.%u.%u.%u\n", s[0], s[1], s[2], s[3]);
-	pr_debug("got the ip %u\n", *res);
+    unsigned int s[4];
+    int i;
+    sscanf(ip, "%u.%u.%u.%u", s, s + 1, s + 2, s + 3);
+    *res = 0;
+    for (i = 0; i < 4; i++) *res |= s[i] << (8 * i);
+    pr_debug("%u.%u.%u.%u\n", s[0], s[1], s[2], s[3]);
+    pr_debug("got the ip %u\n", *res);
 }
 
 struct sockaddr_in* cons_addr(const char* ip) {
