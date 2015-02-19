@@ -14,7 +14,8 @@ int sock_recv(struct socket *sock, void *buf, int size);
 /* Read a line of data and return the start pointer of the line in <buf>,
  * which should later be kfree()d. The line is padded with '\0'.
  * Return value: length of the line on success; otherwise 0 for an incomplete
- * line before closing connection or -1 for error, and <buf> is not set. */
+ * line before closing connection or negative value for error, and <buf> is
+ * not set. */
 int sock_readline(struct socket *sock, char **buf);
 
 /* Convert the dot-represented IPv4 address to a sockaddr_in struct allocated,
